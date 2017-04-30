@@ -1,0 +1,148 @@
+###############Prerequisites:Installing packages#############
+install.packages("twitteR")
+install.packages("wordcloud")
+install.packages("RCurl")
+install.packages("tm")
+install.packages("RColorBrewer")
+install.packages("SnowbalC")
+install.packages("RXKCD")
+install.packages("plyr")
+install.packages("ggplot2")
+
+###############Requesting access of Packages#############
+
+require("twitteR")
+require("RCurl")
+require("tm")
+require("wordcloud")
+require("RColorBrewer")
+require("SnowballC")
+require("RXKCD")
+require("stringr")
+require("plyr")
+require("ggplot2")
+
+#####################User Authentication######################
+
+consumer_key <- 'BYNOxbs7oxxZzQlIAPaeg5U3k'
+consumer_secret <- 'lxZKvwXVb79xkAl0o2UuMqBYcYpZohRrYBjo2yIj3tydngEJ8X'
+access_token <- '4834425824-FCsV6rhzpy0MHFKrxaI9WreOvAiEI9wSJn0APk6'
+access_secret <- 'wqZdFT7S64MI5pn4QqMqZ3xb4ylangoRHfOaiJD0irjla'
+
+########################OAuth Request#########################
+
+setup_twitter_oauth(consumer_key,consumer_secret,access_token,access_secret)
+
+########################Requset Data##########################
+tweets <- searchTwitter("#civilwar", n=500, lang="en")
+
+###########################################################
+data transferred to text file
+###########################################################
+
+tweets.txt <- sapply(tweets, function(t)t$getText())
+
+tweets.txt <- str_replace_all(tweets.txt,"[^[:graph:]]", " ") 
+
+###########################################################
+cleaning data for sentiment analysis
+###########################################################
+
+clean.text = function(x)
+{
+  
+   # tolower
+   x = tolower(x)
+   # remove rt
+   x = gsub("rt", "", x)
+   # remove at
+   x = gsub("@\\w+", "", x)
+   # remove punctuation
+   x = gsub("[[:punct:]]", "", x)
+   # remove numbers
+   x = gsub("[[:digit:]]", "", x)
+   # remove links http
+   x = gsub("http\\w+", "", x)
+   # remove tabs
+   x = gsub("[ |\t]{2,}", "", x)
+   # remove blank spaces at the beginning
+   x = gsub("^ ", "", x)
+   # remove blank spaces at the end
+   x = gsub(" $", "", x)
+   return(x)
+}
+
+cleanText <- clean.text(tweets.txt)
+vector <- paste(cleanText,collapse=" ")
+remwords <- c("movie","http","the")
+vector <- removeWords(vector,c(stopwords("english"),remwords))
+
+###########################################################
+(A)create wordcloud
+###########################################################
+
+wordcloud(vector, scale=c(6,0.7), max.words=150, 
+           random.order=FALSE, rot.per=0.35,colors=brewer.pal(8,"Dark2"))
+
+###########################################################
+positive and negative keywords matched
+###########################################################
+
+pos <- scan("positive.txt",what="character",comment.char=";") //Text file of positive keywords called and matched
+neg <- scan("negative.txt",what="character",comment.char=";") //Text file of negative keywords called and matched
+source("sentiment.R") //R file with code to calculate sentiment is called
+
+###########################################################
+data analysis
+###########################################################
+
+analysis <- score.sentiment(cleanText,pos,neg)
+table(analysis$score)
+neutral <- length(which(analysis$score == 0))
+positive <- length(which(analysis$score > 0))
+negative <- length(which(analysis$score < 0))
+Sentiment <- c("Negative","Neutral","Positive")
+Count <- c(negative,neutral,positive)
+output <- as.data.frame(Sentiment,Count)
+
+##########################################################
+(B)graphical representaion of sentiment
+###########################################################
+
+ggplot(data = output, aes(x = Sentiment, y =Count)) +geom_bar(stat = "identity", position = "stack", aes(fill = Sentiment)) 
++labs(y = "\nCount", x = "\nSentiment")
+
+##########################################################
+data conversion into corpus
+###########################################################
+
+class(tweets)
+humblevs_text <- sapply(tweets,function(x) x$getText())
+him_corpus <- Corpus(VectorSource(humblevs_text))
+him_corpus
+inspect(him_corpus[1])
+
+#######################Clean Date##############################
+tospace<- content_transformer(function(x,pattern) gsub(pattern," ",x))
+him_corpus<- tm_map(him_corpus,content_transformer(tolower))
+him_corpus<- tm_map(him_corpus,removeNumbers)
+him_corpus<- tm_map(him_corpus,removeWords,stopwords("english"))
+him_corpus<- tm_map(him_corpus,removePunctuation)
+him_corpus<- tm_map(him_corpus,stripWhitespace)
+him_corpus<- tm_map(him_corpus,stemDocument)
+
+################################################################
+build term document matrix
+###############################################################
+dtm<- TermDocumentMatrix(him_corpus)
+class(dtm)
+m<- as.matrix(dtm)
+v<- sort(rowSums(m),decreasing = TRUE)
+d<- data.frame(word= names(v),freq= v)
+head(d,14)
+
+#############(C)build histogram of frequently used words############
+set.seed(100)
+barplot(d[1:15,]$freq, las = 2, names.arg = d[1:15,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
